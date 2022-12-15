@@ -24,7 +24,11 @@ class Cluster:
     _kb_fname: InitVar[str] = field(default='configkb.out', repr=False)
     _vmat_fname: InitVar[str] = field(default='vmat.out', repr=False)
 
-    _lattice_fname: str = field(default='lat.in',repr=False)
+    _lattice_fname: str = field(default='lat.in')
+    _structure_fname: str = field(default='str.in')
+    _sqs_structure_fname: np.ndarray = field(default='str_relax.out')
+    _input_structure_fname: np.ndarray = field(default='str.in')
+
     _ordered_correlations: np.ndarray = None
 
     clusters: dict = field(init=False)
@@ -59,18 +63,62 @@ class Cluster:
         self.vmat = read_vmatrix(f'{self.structure}/{_vmat_fname}')
         self.eci = read_eci(f'{self.structure}/{_eci_fname}')
 
+        #TODO this part stinks but is useful now. To be removed later.
+        #fix the lattice scale difference between input geometry and relax geometry
+        try:
+            with open(f"{self.structure}/{self._input_structure_fname}", 'r') as str_in:
+                strin_lines = str_in.readlines()
+        except FileNotFoundError:
+            print(f'{self.structure}/{self._input_structure_fname} does not exists')
+        try:
+            with open(f"{self.structure}/{self._sqs_structure_fname}", 'r') as str_out:
+                strout_lines = str_out.readlines()
+        except FileNotFoundError:
+            print(f'{self.structure}/{self._sqs_structure_fname} does not exists')
+
+        if len(strin_lines[0].split(' ')) > 3:
+            strout_lines[0:4] = strin_lines[0:4]
+            strout_lines.pop(4)
+            strout_lines.pop(5)
+        else:
+            strout_lines[0:6] = strin_lines[0:6]
+
+        with open(f'{self.structure}/{self._sqs_structure_fname}_temp','w',encoding='utf-8') as scaled_relax:
+            for line in strout_lines:
+                scaled_relax.write(line+'\n')
 
     @property
-    def ordered_correlations(self):
+    def sqs_correlations(self):
+        corr_sqs_ = subprocess.run(['corrdump', '-c', f'-cf={self.structure}/{self._clusters_fname}', f'-s={self.structure}/{self._sqs_structure_fname}_temp', f'-l={self.structure}/{self._lattice_fname}'],
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE,
+                                  check=True
+                                 )
+        # convert from bytes to string list
+        corr_sqs_ = corr_sqs_.stdout.decode('utf-8').split('\t')[:-1]
+        corr_sqs_ = np.array(corr_sqs_, dtype=np.float32)  # convert to arrays
+
+        return corr_sqs_
+
+    @property
+    def ordered_correlations(self: Cluster) -> np.ndarray:
         return self._ordered_correlations
+
     @ordered_correlations.setter
-    def ordered_correlations(self, correlations):
+    def ordered_correlations(self: Cluster, correlations: np.ndarray) -> np.ndarray:
         self._ordered_correlations = correlations
+
+    @property
+    def order2disoder_distance(self: Cluster) -> float:
+        return np.linalg.norm(self._ordered_correlations - self.disordered_correlations)
 
     @cached_property
     def num_lat_atoms(self: Cluster) -> int:
-        with open(f"{self.structure}/{self._lattice_fname}", 'r') as lat_out:
-            lat_lines = lat_out.readlines()
+        try:
+            with open(f"{self.structure}/{self._lattice_fname}", 'r') as lat_out:
+                lat_lines = lat_out.readlines()
+        except FileNotFoundError:
+            print(f'{self.structure}/{self._lattice_fname} does not exists')
 
         if len(lat_lines[0].split(' ')) > 3:
             return len(lat_lines) - 4
@@ -79,8 +127,12 @@ class Cluster:
 
     @cached_property
     def num_str_atoms(self):
-        with open(f"{self.structure}/str.in", 'r') as str_out:
-            str_lines = str_out.readlines()
+        try:
+            with open(f"{self.structure}/{self._input_structure_fname}", 'r') as str_out:
+                str_lines = str_out.readlines()
+        except FileNotFoundError:
+            print(f'{self.structure}/{self._input_structure_fname} does not exists')
+
         if len(str_lines[0].split(' ')) > 3:
             return len(str_lines) - 4
         else:
@@ -122,7 +174,7 @@ class Cluster:
     @cached_property
     def disordered_correlations(self: Cluster) -> np.ndarray:
 
-        corr_rnd = subprocess.run(['corrdump', '-c', f'-cf={self.structure}/{self._clusters_fname}', f'-s={self.structure}/str.in', f'-l={self.structure}/{self._lattice_fname}', '-rnd'],
+        corr_rnd = subprocess.run(['corrdump', '-c', f'-cf={self.structure}/{self._clusters_fname}', f'-s={self.structure}/{self._input_structure_fname}', f'-l={self.structure}/{self._lattice_fname}', '-rnd'],
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
                                   check=True
@@ -165,26 +217,32 @@ class Cluster:
             for vmat in self.vmat.values():
                 frho.write(f'{" ".join(map(str,vmat@correlations))}\n')
 
+    def distance_from_ordered(self: Cluster, correlations: np.ndarray) -> float:
+        return np.linalg.norm(self._ordered_correlations - correlations)
+
+    def distance_from_disordered(self: Cluster, correlations: np.ndarray) -> float:
+        return np.linalg.norm(self.disordered_correlations - correlations)
+
     def __repr__(self: Cluster) -> str:
 
         print('\n===========================')
         print('Cluster Description:')
-        print("\nClusters:")
-        print("{0:<8s}|{1:<8s}|{2:<8s}|{3:<8s}".format("Index","Type", "Mult","Radius"))
+        print('\nClusters:')
+        print('{0:<8s}|{1:<8s}|{2:<8s}|{3:<8s}'.format('Index','Type', 'Mult','Radius'))
         for idx, cluster in self.clusters.items():
             assert self.clustermult[idx] == cluster['mult']
-            print("{0:<8d}|{1:<8d}|{2:<12d}|{3:<8f}".format(idx, cluster['type'], cluster['mult'], cluster['length']))
+            print('{0:<8d}|{1:<8d}|{2:<12d}|{3:<8f}'.format(idx, cluster['type'], cluster['mult'], cluster['length']))
 
-        print("\nConfigs:")
-        print("{0:<8s}|{1:<8s}".format("Index","No. of subconfigs"))
+        print('\nConfigs:')
+        print('{0:<8s}|{1:<8s}'.format('Index','No. of subconfigs'))
         for idx, config in self.configs.items():
             assert len(self.configmult[idx]) == config['num_of_subclus']
-            print("{0:<8d}|{1:<8d}".format(idx, config['num_of_subclus'],))
+            print('{0:<8d}|{1:<8d}'.format(idx, config['num_of_subclus'],))
 
         print('\nECIs:')
-        print("{0:<8s}|{1:<8s}".format("Index","ECI"))
+        print('{0:<8s}|{1:<8s}'.format('Index','ECI'))
         for idx, eci in self.eci.items():
-            print("{0:<8d}|{1:<18f}".format(idx, eci))
+            print('{0:<8d}|{1:<18f}'.format(idx, eci))
 
         print('--------------------------------------------------')
         print('Disordered Correlations:')
@@ -200,6 +258,12 @@ class Cluster:
             print(f'{self.ordered_correlations}')
             print('Ordered Configuration Probabilities:')
             print(f'{self.print_config_probabilities(self.ordered_correlations)}')
+        print('--------------------------------------------------')
+
+        print('SQS Correlations:')
+        print(f'{self.sqs_correlations}')
+        print('Ordered Configuration Probabilities:')
+        print(f'{self.print_config_probabilities(self.sqs_correlations)}')
         print('--------------------------------------------------')
 
         print(f'Total Configurations: {self.vmatrix_array.shape[0]}')

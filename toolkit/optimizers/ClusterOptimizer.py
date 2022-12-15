@@ -57,5 +57,9 @@ class ClusterOptimizer(ABC):
             self._d2F = F_hessian
 
     @abstractmethod
+    def get_energy(self, correlations: np.ndarray) -> float:
+        raise NotImplementedError('Subclasses should define this method')
+
+    @abstractmethod
     def fit(self, **kwargs: Any):
-        pass
+        raise NotImplementedError('Subclasses should define this method')

@@ -59,6 +59,13 @@ class OrderedStateOptimizer(ClusterOptimizer):
             print(
                 f'WARNING: linear programming for ordered correlation search failed: {result.status} - {result.message}\nExiting...')
 
+    def get_energy(self: OrderedStateOptimizer,
+                   correlations: np.ndarray,
+                  ) -> float:
+        return np.dot(correlations,
+                      self.cluster.eci_array*self.cluster.clusmult_array
+                     )
+
     def __repr__(self) -> str:
         print('\n--------------------------')
         print('Ordered State Description:')

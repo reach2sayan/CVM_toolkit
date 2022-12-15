@@ -54,13 +54,15 @@ class CVMOptimizer(ClusterOptimizer):
     def temperature(self, T):
         self._T = T
 
-    def get_energy(self, correlations):
+    def get_energy(self: CVMOptimizer,
+                   correlations: np.ndarray
+                  ) -> float:
         return self._F(correlations,
                        self._mults_eci,
                        self._multconfig_kb,
                        self.cluster.vmatrix_array,
                        self._vrhologrho,
-                       self.temperature
+                       self._T
                       )
 
     def fit(self: CVMOptimizer) -> (float, np.ndarray, np.ndarray, float):

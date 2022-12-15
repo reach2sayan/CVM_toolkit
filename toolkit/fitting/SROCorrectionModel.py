@@ -1,19 +1,23 @@
 from __future__ import annotations
+from dataclasses import dataclass, field
 from typing import Callable
 import sys
 import json
 import inspect
 
 import numpy as np
+import pandas as pd
 from scipy.optimize import curve_fit
 from sympy.parsing.sympy_parser import (
     parse_expr,
     standard_transformations,
     implicit_multiplication,
 )
+from toolkit.io.SROResults import SROResults
 
 eV2J = 96491.5666370759
 #return popt, pcov, return_line, return_line_replaced, func.__code__.co_varnames[1:]
+@dataclass(kw_only=True, eq=False, order=False)
 class SROCorrectionModel:
     """
     Function to fit SRO correction as a function of T
@@ -27,23 +31,25 @@ class SROCorrectionModel:
         popt - Best fit params
         pcov - covariance of the parameters
     """
-    def __init__(self: SROCorrectionModel,
-                 func: Callable[[...],float],
-                 num_str_atoms: int,
-                 in_Joules: bool = True,
-                 method: str = 'dogbox',
-                 print_output: bool = True,
-                ) -> None:
+    func: Callable[[...],float]
+    num_str_atoms: int
 
-        self._p0 = None
-        self.func = func
-        self.num_str_atoms = num_str_atoms
-        self.in_Joules = in_Joules
-        self.method = method
-        self.print_output = print_output
+    in_Joules: bool = True
+    method: str = 'dogbox'
+    print_output: bool = True
 
-        self.popt = None
-        self.pcov = None
+    popt: np.ndarray = None
+    pcov: np.ndarray = None
+    _p0: np.ndarray  = None
+    _data: pd.DataFrame = None
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, data):
+        self._data = data
 
     @property
     def p0(self: SROCorrectionModel) -> None:
@@ -67,7 +73,7 @@ class SROCorrectionModel:
         return str(return_line)
 
     @property
-    def return_line_replaced(self):
+    def sro_function(self):
         return_line_replaced = self.return_line
         for index, varname in enumerate(self.func.__code__.co_varnames[1:]):
             return_line_replaced = return_line_replaced.replace(varname,f'{self.popt[index]}')
@@ -93,15 +99,12 @@ class SROCorrectionModel:
             print(f'Output to func:\n{return_line_replaced}')
             return return_line_replaced
 
-    def sro_fit(self, results):
-        try:
-            with open(results, 'r', encoding='utf-8') as fhandle:
-                data = json.load(fhandle)
-        except FileNotFoundError:
-            sys.exit(f"Data file {results.split('/')[-1]} not found...")
+    def fit(self: SROCorrectionModel) -> None:
 
-        xdata = np.array([item.get('temperature') for item in data if item.get('temperature') != 0])
-        ydata = np.array([item.get('F_cvm') - item.get('F_rnd') for item in data if item.get('temperature') != 0])*self.num_str_atoms
+        xdata = self._data[self._data.temperature != 0].temperature.values
+        ydata = self._data[self._data.temperature != 0].apply(lambda x: x.F_opt - x.F_rnd, axis=1).values
+
+        ydata *= self.num_str_atoms
         if self.in_Joules:
             ydata = ydata*eV2J
 
@@ -117,4 +120,3 @@ class SROCorrectionModel:
             ycont = self.func(xcont,*self.popt)
             np.savetxt('sro_fitting_calculated.out',np.hstack((xcont, ycont)))
             np.savetxt('sro_fitting_data.out',np.hstack((xdata[:,np.newaxis], ydata[:,np.newaxis])))
-

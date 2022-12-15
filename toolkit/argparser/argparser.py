@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 
 def SRO_argument_parser():
     """
@@ -9,6 +10,7 @@ def SRO_argument_parser():
                                      epilog='The code uses scipy heavily for all numerical optimization. Thanks guys.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                     )
+    tdate = datetime.now().strftime('%d%b-%H%m')
 
     opt_params = parser.add_argument_group("Parameters related to CVM Optimisation")
     sro_fit_params = parser.add_argument_group("Parameters related to SRO fitting")
@@ -206,8 +208,9 @@ def SRO_argument_parser():
                             help="Initial stepsize of the basinhopping algorithm from the disordered phase",
                             )
     opt_params.add_argument('--out',
-                            default='result.json',
-                            help="Indicates the name of the output file ",
+                            default=f'result-{tdate}.csv',
+                            help="Indicates the name of the output file.\
+                            The default name appends the current data and time",
                             )
 
     args = parser.parse_args()
