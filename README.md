@@ -1,4 +1,6 @@
-## Arguments and Usage
+## CVM Optimization Toolkit
+By Sayan Samanta and Axel van de Walle @ Brown University RI USA
+---
 ### Usage
 ```
 usage: sro_correction [-h] [--seed SEED] [--disp] [--log LOG] [--out OUT] [--toscreen] [--eci ECI] [--vmat VMAT] [--clusters CLUSTERS]
@@ -10,7 +12,7 @@ usage: sro_correction [-h] [--seed SEED] [--disp] [--log LOG] [--out OUT] [--tos
                       [--fit_ordered_only] [--method_linprog METHOD_LINPROG] [--basinhopping] [--verbose] [--approx_deriv] [--earlystop EARLYSTOP]
                       [--initial_stepsize INITIAL_STEPSIZE]
 ```
-### Arguments
+### Parameters
 #### Quick reference table
 |Short    |Long                      |Default         |Description                                                                                                                                                                                                                                                                                                                                              |
 |---------|--------------------------|----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
