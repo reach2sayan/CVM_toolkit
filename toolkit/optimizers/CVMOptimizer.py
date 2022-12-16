@@ -123,18 +123,14 @@ class CVMOptimizer(ClusterOptimizer):
                 print(f'Current minimum correlations: {temp_results.x}')
                 print(f"Gradient: {np.array2string(temp_results.grad)}")
                 print(f"Constraint Violation: {temp_results.constr_violation}")
-                print(
-                    f"Stop Status: {temp_results.status} | {temp_results.message}")
-
+                print(f"Stop Status: {temp_results.status} | {temp_results.message}")
                 print(f"Acccepted? : {accepted}")
                 print(f"Current Min Free Energy @ T = {self.temperature}K : {result_value/self.cluster.num_lat_atoms}")
                 print(f"Current Best Contr. Viol : {result_constr_viol}")
-                print('\n====================================\n')
 
             earlystop += 1
             if earlystop > self.early_stopping_count and trial > self.num_trials/2:
-                print(
-                    f'No improvement for consecutive {self.early_stopping_count} steps. After half of total steps ({int(self.num_trials/2)}) were done')
+                print(f'No improvement for consecutive {self.early_stopping_count} steps. After half of total steps ({int(self.num_trials/2)}) were done')
                 break
 
         self.optimized_result = result

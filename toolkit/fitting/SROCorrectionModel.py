@@ -2,11 +2,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 import sys
+import os
 import json
 import inspect
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from sympy.parsing.sympy_parser import (
     parse_expr,
@@ -38,6 +40,8 @@ class SROCorrectionModel:
     method: str = 'dogbox'
     print_output: bool = True
 
+    _data_output_fname: str = 'sro_correction_data.out'
+    _pred_output_fname: str = 'sro_correction_predicted.out'
     popt: np.ndarray = None
     pcov: np.ndarray = None
     _p0: np.ndarray  = None
@@ -49,7 +53,10 @@ class SROCorrectionModel:
 
     @data.setter
     def data(self, data):
-        self._data = data
+        if isinstance(data, str):
+            self._data = pd.read_csv(data)
+        elif isinstance(data, pd.DataFrame):
+            self._data = data
 
     @property
     def p0(self: SROCorrectionModel) -> None:
@@ -95,9 +102,7 @@ class SROCorrectionModel:
         return_line_replaced = return_line_replaced.replace('--','+')
         return_line_replaced = return_line_replaced.replace('exp','EXP')
 
-        if self.print_output:
-            print(f'Output to func:\n{return_line_replaced}')
-            return return_line_replaced
+        return return_line_replaced
 
     def fit(self: SROCorrectionModel) -> None:
 
@@ -118,5 +123,43 @@ class SROCorrectionModel:
         if self.print_output:
             xcont = np.linspace(min(xdata), max(xdata), 1000)[:, np.newaxis]
             ycont = self.func(xcont,*self.popt)
-            np.savetxt('sro_fitting_calculated.out',np.hstack((xcont, ycont)))
-            np.savetxt('sro_fitting_data.out',np.hstack((xdata[:,np.newaxis], ydata[:,np.newaxis])))
+            np.savetxt(f'{self._pred_output_fname}',np.hstack((xcont, ycont)))
+            np.savetxt(f'{self._data_output_fname}',np.hstack((xdata[:,np.newaxis], ydata[:,np.newaxis])))
+
+    def plot_fit(self: SROCorrectionModel,
+                 image_name: str = 'cvmfit.svg',
+                 **matplotlib_kwargs,
+                ) -> None:
+
+        if matplotlib_kwargs is not None:
+            plt.rc(matplotlib_kwargs)
+        else:
+            plt.style.use('classic')
+            plt.rc('text', usetex=True)
+            plt.rc('font', family='serif',weight='bold',)
+            plt.rc('font', family='serif',weight='bold',)
+            plt.rc('xtick', labelsize='large')
+            plt.rc('ytick', labelsize='large')
+        structure = os.getcwd()
+
+        ydata = self._data[self._data.temperature != 0].apply(lambda x: x.F_opt - x.F_rnd, axis=1).values
+        ydata *= self.num_str_atoms
+        if self.in_Joules:
+            ydata = ydata*eV2J
+
+        xdata = self._data[self._data.temperature != 0].temperature.values
+        xcont = np.linspace(min(xdata), max(xdata), 1000)[:, np.newaxis]
+        ycont = self.func(xcont,*self.popt)
+
+        plt.plot(xcont,ycont,'b-',label='fitted')
+        plt.plot(xdata,ydata,'r.',label='data')
+        plt.xlabel('temperature (in K)')
+        plt.suptitle(f'SRO Correction in {structure.split("/")[-1]}')
+        plt.grid()
+        if self.in_Joules:
+            plt.ylabel(r'CVM Correction (F$_{cvm}$ - F$_{rnd}$) (in J/mol)')
+        else:
+            plt.ylabel('SRO Correction (in eV/atom)')
+        plt.legend()
+
+        plt.savefig(f'{structure}/{image_name}')

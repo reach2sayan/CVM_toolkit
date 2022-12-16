@@ -1,5 +1,4 @@
 import argparse
-from datetime import datetime
 
 def SRO_argument_parser():
     """
@@ -10,7 +9,6 @@ def SRO_argument_parser():
                                      epilog='The code uses scipy heavily for all numerical optimization. Thanks guys.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                     )
-    tdate = datetime.now().strftime('%d%b-%H%m')
 
     opt_params = parser.add_argument_group("Parameters related to CVM Optimisation")
     sro_fit_params = parser.add_argument_group("Parameters related to SRO fitting")
@@ -26,14 +24,17 @@ def SRO_argument_parser():
                         default='False',
                         help="Flag to turn intermediate outputs on",
                        )
-    parser.add_argument('--log_level',
-                        choices=['INFO','DEBUG','WARNING','ERROR'],
-                        default='INFO',
-                        help="Flag to set output level",
-                       )
     parser.add_argument('--log',
                         default='log.out',
                         help="Filename for the log file "
+                       )
+    parser.add_argument('--out',
+                        default='result.csv',
+                        help='Indicates the name of the output file'
+                       )
+    parser.add_argument('--toscreen',
+                        action='store_true',
+                        help='Flag to output to screen in addition to log file'
                        )
 
     clus_params.add_argument('--eci',
@@ -110,7 +111,7 @@ def SRO_argument_parser():
                                 default=False,
                                 help="Flag to skip fitting SRO correction model",
                                 )
-    sro_fit_params.add_argument('--fit_sro_only',
+    sro_fit_params.add_argument('--fit_correction_only',
                                 action='store_true',
                                 default=False,
                                 help="Flag to skip SRO correction optimisation but fit pre-existing data to SRO correction model",
@@ -206,11 +207,6 @@ def SRO_argument_parser():
                             default=0.1,
                             type=float,
                             help="Initial stepsize of the basinhopping algorithm from the disordered phase",
-                            )
-    opt_params.add_argument('--out',
-                            default=f'result-{tdate}.csv',
-                            help="Indicates the name of the output file.\
-                            The default name appends the current data and time",
                             )
 
     args = parser.parse_args()

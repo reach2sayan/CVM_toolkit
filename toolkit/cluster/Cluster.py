@@ -85,7 +85,7 @@ class Cluster:
 
         with open(f'{self.structure}/{self._sqs_structure_fname}_temp','w',encoding='utf-8') as scaled_relax:
             for line in strout_lines:
-                scaled_relax.write(line+'\n')
+                scaled_relax.write(line)
 
     @property
     def sqs_correlations(self):

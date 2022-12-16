@@ -4,7 +4,7 @@ class Logger:
         self.toscreen = toscreen
         self.stream = stream
         self.outfile = open(logfile,'w')
-    
+
     def write(self, message):
         if self.toscreen:
             self.stream.write(message)

@@ -1,19 +1,22 @@
-from toolkit.argparser.argparser import SRO_argument_parser
+import os
+import sys
+import subprocess
+from pathlib import Path
+from datetime import datetime
+from collections.abc import Iterable
+
+from toolkit.io.argparser import SRO_argument_parser
+from toolkit.io.SROResults import SROResults
 from toolkit.cluster.Cluster import Cluster
 from toolkit.optimizers.OrderedStateOptimizer import OrderedStateOptimizer
 from toolkit.optimizers.CVMOptimizer import CVMOptimizer
 from toolkit.fitting.SROCorrectionModel import SROCorrectionModel
-from toolkit.fitting.sro_model import sro_model
-from toolkit.io.SROResults import SROResults
+from toolkit.functions.sro_model import sro_model
+from toolkit.logger.Logger import Logger
 
-import os
-import sys
 import numpy as np
-import pandas as pd
-import subprocess
-from pathlib import Path
 
-def custom_linspace(start, stop, step=1):
+def custom_linspace(start: float, stop: float, step:float =1) -> Iterable[float]:
     """
     Like np.linspace but uses step instead of num
     This is inclusive to stop, so if start=1, stop=3, step=0.5
@@ -24,7 +27,6 @@ def custom_linspace(start, stop, step=1):
 
 if __name__ == '__main__':
 
-
     np.set_printoptions(suppress=True, precision=4)
 
     structure = os.getcwd()
@@ -33,12 +35,44 @@ if __name__ == '__main__':
 
     #parse arguments
     args = SRO_argument_parser()
+    tdate = datetime.now().strftime('%d%b-%H%m')
+    if args.norm_constraint:
+        log_fname = f'{args.log}-cons-{tdate}'
+        out_fname = f'{args.out}-cons-{tdate}'
+    else:
+        log_fname = f'{args.log}-nocons-{tdate}'
+        out_fname = f'{args.out}-nocons-{tdate}'
+    sys.stdout = Logger(sys.stdout, log_fname, args.toscreen)
+
     results = SROResults(phase = phase,
                          structure = structure,
                          norm_constrained = args.norm_constraint,
                         )
 
-    #Generate Cluster Description
+    if args.fit_correction_only:
+        sys.exit(0)
+        cluster = Cluster(_clusters_fname = args.clusters,
+                          _eci_fname = args.eci,
+                          _clustermult_fname = args.clustermult,
+                          _config_fname = args.config,
+                          _configmult_fname = args.configmult,
+                          _kb_fname = args.kb,
+                          _vmat_fname = args.vmat,
+                          _lattice_fname = args.lat
+                         )
+        sro_correction_model = SROCorrectionModel(func=sro_model,
+                                                  num_str_atoms = cluster.num_str_atoms,
+                                                  in_Joules = args.inJoules,
+                                                  print_output = args.disp
+                                                 )
+        sro_correction_model.data = args.out
+        _ = sro_correction_model.fit()
+        sro_correction_model.plot_fit()
+        with open(f'{structure}/func','w',encoding='utf-8') as correction_func:
+            correction_func.write(sro_correction_model.sro_function)
+            print('Flag to fit SRO Correction function only. Exiting.')
+            sys.exit(0)
+
     try:
         _ = subprocess.run(['cvmclus', f'-m={phase}/{args.maximal_clusters}', f'-l={structure}/{args.lat}'],
                            stdout=subprocess.PIPE,
@@ -46,8 +80,7 @@ if __name__ == '__main__':
                            check=True
                            )
     except subprocess.SubprocessError as suberr:
-        print('Error in generating cluster configuration files for CVM...')
-        print(suberr)
+        print('Error in generating cluster configuration files for CVM.')
         print('Continuing to run. Might work if the required files already exists, maybe created by some previous run of cvmclus')
 
     #Create Cluster Object
@@ -65,16 +98,19 @@ if __name__ == '__main__':
     options_ordered = {'disp': bool(args.verbose),
                        'maxiter': args.maxiter_linprog,
                       }
+
     opt_ordered = OrderedStateOptimizer(cluster = cluster,
                                         print_output = args.disp,
                                         num_trials = args.maxiter_linprog,
                                         options = options_ordered,
                                         method = args.method_linprog,
                                        )
-
     _ = opt_ordered.fit()
 
-    print(cluster)
+    if args.fit_ordered_only:
+        print('Flag to fit ordered state only found. Exiting.')
+        sys.exit(0)
+
     if args.basinhopping.title() == 'True':
         raise NotImplementedError('In the works...Consider using the random search')
     else:
@@ -96,18 +132,12 @@ if __name__ == '__main__':
                                options = options,
                               )
 
-    sro_correction_model = SROCorrectionModel(func=sro_model,
-                                              num_str_atoms = opt_sro.cluster.num_str_atoms,
-                                              in_Joules = args.inJoules,
-                                              print_output = args.disp
-                                             )
-
     #MAIN LOOP
     results_ = []
     for T in custom_linspace(start=args.Tmin, stop=args.Tmax, step=args.Tstep):
 
         opt_sro.temperature = T
-        print('\n====================================\n')
+        print('=' * 25)
         print(f'Optimising at temperature {opt_sro.temperature}K')
 
         F_ordered = opt_sro.get_energy(opt_sro.cluster.ordered_correlations)
@@ -133,7 +163,7 @@ if __name__ == '__main__':
         print(f'Optimised Free energy Gradient: {np.array2string(opt_grad)}')
         print('Optimised Cluster Configuration Probabilities:')
         opt_sro.cluster.print_config_probabilities(opt_correlations)
-        print('\n====================================\n')
+        print('=' * 25)
 
         results_.append({'phase'        : opt_sro.cluster.phase.rsplit('/',maxsplit=1)[-1],
                          'structure'    : opt_sro.cluster.structure.split('/')[-1],
@@ -147,10 +177,21 @@ if __name__ == '__main__':
                         }
                        )
         results.result = results_
-        results.save_to_file(f'{opt_sro.cluster.structure}/{args.out}')
+        results.save_to_file(f'{opt_sro.cluster.structure}/{out_fname}')
 
+    sro_correction_model = SROCorrectionModel(func=sro_model,
+                                              num_str_atoms = opt_sro.cluster.num_str_atoms,
+                                              in_Joules = args.inJoules,
+                                              print_output = args.disp
+                                             )
     sro_correction_model.data = results.result
     _ = sro_correction_model.fit()
+    sro_correction_model.plot_fit()
+    if args.disp:
+        if args.inJoules:
+            print('SRO Correction function (in J/mol):')
+        else:
+            print('SRO Correction function (in eV/atom):')
+        print(sro_correction_model.sro_function)
     with open(f'{opt_sro.cluster.structure}/func','w',encoding='utf-8') as correction_func:
         correction_func.write(sro_correction_model.sro_function)
-    print('Finished SRO Correction')
