@@ -50,13 +50,12 @@ if __name__ == '__main__':
                         )
 
     if args.fit_correction_only:
-        sys.exit(0)
         cluster = Cluster(_clusters_fname = args.clusters,
                           _eci_fname = args.eci,
                           _clustermult_fname = args.clustermult,
                           _config_fname = args.config,
                           _configmult_fname = args.configmult,
-                          _kb_fname = args.kb,
+                          _kb_fname = args.kikuchi_barker,
                           _vmat_fname = args.vmat,
                           _lattice_fname = args.lat
                          )
@@ -89,7 +88,7 @@ if __name__ == '__main__':
                       _clustermult_fname = args.clustermult,
                       _config_fname = args.config,
                       _configmult_fname = args.configmult,
-                      _kb_fname = args.kb,
+                      _kb_fname = args.kikuchi_barker,
                       _vmat_fname = args.vmat,
                       _lattice_fname = args.lat
                      )
