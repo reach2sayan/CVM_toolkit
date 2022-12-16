@@ -43,7 +43,6 @@ if __name__ == '__main__':
         log_fname = f'{args.log}-nocons-{tdate}'
         out_fname = f'{args.out}-nocons-{tdate}'
     sys.stdout = Logger(sys.stdout, log_fname, args.toscreen)
-
     results = SROResults(phase = phase,
                          structure = structure,
                          norm_constrained = args.norm_constraint,
@@ -136,7 +135,7 @@ if __name__ == '__main__':
     for T in custom_linspace(start=args.Tmin, stop=args.Tmax, step=args.Tstep):
 
         opt_sro.temperature = T
-        print('=' * 25)
+        print('=' * 50)
         print(f'Optimising at temperature {opt_sro.temperature}K')
 
         F_ordered = opt_sro.get_energy(opt_sro.cluster.ordered_correlations)
@@ -162,7 +161,7 @@ if __name__ == '__main__':
         print(f'Optimised Free energy Gradient: {np.array2string(opt_grad)}')
         print('Optimised Cluster Configuration Probabilities:')
         opt_sro.cluster.print_config_probabilities(opt_correlations)
-        print('=' * 25)
+        print('=' * 50)
 
         results_.append({'phase'        : opt_sro.cluster.phase.rsplit('/',maxsplit=1)[-1],
                          'structure'    : opt_sro.cluster.structure.split('/')[-1],
