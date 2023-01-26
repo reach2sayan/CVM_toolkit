@@ -58,8 +58,9 @@ if __name__ == '__main__':
                           _vmat_fname = args.vmat,
                           _lattice_fname = args.lat
                          )
-        sro_correction_model = SROCorrectionModel(func=sro_model,
-                                                  num_str_atoms = cluster.num_str_atoms,
+        num_str_atoms = cluster.num_str_atoms(structure=cluster.input_structure)
+        sro_correction_model = SROCorrectionModel(func = sro_model,
+                                                  num_str_atoms =  num_str_atoms,
                                                   in_Joules = args.inJoules,
                                                   print_output = args.disp
                                                  )
@@ -71,26 +72,10 @@ if __name__ == '__main__':
             print('Flag to fit SRO Correction function only. Exiting.')
             sys.exit(0)
 
-    try:
-        _ = subprocess.run(['cvmclus', f'-m={phase}/{args.maximal_clusters}', f'-l={structure}/{args.lat}'],
-                           stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE,
-                           check=True
-                           )
-    except subprocess.SubprocessError as suberr:
-        print('Error in generating cluster configuration files for CVM.')
-        print('Continuing to run. Might work if the required files already exists, maybe created by some previous run of cvmclus')
-
-    #Create Cluster Object
-    cluster = Cluster(_clusters_fname = args.clusters,
-                      _eci_fname = args.eci,
-                      _clustermult_fname = args.clustermult,
-                      _config_fname = args.config,
-                      _configmult_fname = args.configmult,
-                      _kb_fname = args.kikuchi_barker,
-                      _vmat_fname = args.vmat,
-                      _lattice_fname = args.lat
-                     )
+    cluster = Cluster.from_maximal_cluster(maxclus_fname = args.maximal_clusters,
+                                           lattice_fname = args.lat
+                                          )
+    num_str_atoms = cluster.num_str_atoms(structure=cluster.input_structure)
 
     #Calculate Ordered State
     options_ordered = {'disp': bool(args.verbose),
@@ -131,6 +116,7 @@ if __name__ == '__main__':
                               )
 
     #MAIN LOOP
+    print(cluster)
     results_ = []
     for T in custom_linspace(start=args.Tmin, stop=args.Tmax, step=args.Tstep):
 
@@ -177,8 +163,9 @@ if __name__ == '__main__':
         results.result = results_
         results.save_to_file(f'{opt_sro.cluster.structure}/{out_fname}')
 
+    num_str_atoms = opt_sro.cluster.num_str_atoms(structure = opt_sro.cluster.input_structure)
     sro_correction_model = SROCorrectionModel(func=sro_model,
-                                              num_str_atoms = opt_sro.cluster.num_str_atoms,
+                                              num_str_atoms = num_str_atoms,
                                               in_Joules = args.inJoules,
                                               print_output = args.disp
                                              )

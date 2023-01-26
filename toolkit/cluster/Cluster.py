@@ -25,7 +25,6 @@ class Cluster:
     _vmat_fname: InitVar[str] = field(default='vmat.out', repr=False)
 
     _lattice_fname: str = field(default='lat.in')
-    _structure_fname: str = field(default='str.in')
     _sqs_structure_fname: np.ndarray = field(default='str_relax.out')
     _input_structure_fname: np.ndarray = field(default='str.in')
 
@@ -63,6 +62,15 @@ class Cluster:
         self.vmat = read_vmatrix(f'{self.structure}/{_vmat_fname}')
         self.eci = read_eci(f'{self.structure}/{_eci_fname}')
 
+    @property
+    def input_structure(self):
+        return self._input_structure_fname
+    @input_structure.setter
+    def input_structure(self, str_fname):
+        self._input_structure_fname = str_fname
+
+    @property
+    def sqs_correlations(self):
         #TODO this part stinks but is useful now. To be removed later.
         #fix the lattice scale difference between input geometry and relax geometry
         try:
@@ -86,9 +94,6 @@ class Cluster:
         with open(f'{self.structure}/{self._sqs_structure_fname}_temp','w',encoding='utf-8') as scaled_relax:
             for line in strout_lines:
                 scaled_relax.write(line)
-
-    @property
-    def sqs_correlations(self):
         corr_sqs_ = subprocess.run(['corrdump', '-c', f'-cf={self.structure}/{self._clusters_fname}', f'-s={self.structure}/{self._sqs_structure_fname}_temp', f'-l={self.structure}/{self._lattice_fname}'],
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
@@ -99,6 +104,25 @@ class Cluster:
         corr_sqs_ = np.array(corr_sqs_, dtype=np.float32)  # convert to arrays
 
         return corr_sqs_
+
+    def get_correlations(self:Cluster,
+                         structure: str
+                        ):
+        corr_ = subprocess.run(['corrdump', '-c',
+                                f'-cf={self.structure}/{self._clusters_fname}',
+                                f'-s={self.structure}/{structure}',
+                                f'-l={self.structure}/{self._lattice_fname}'
+                               ],
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE,
+                               check=True
+                              )
+        # convert from bytes to string list
+        corr_ = corr_.stdout.decode('utf-8').split('\t')[:-1]
+        corr_ = np.array(corr_, dtype=np.float32)  # convert to arrays
+
+        return corr_
+
 
     @property
     def ordered_correlations(self: Cluster) -> np.ndarray:
@@ -125,13 +149,14 @@ class Cluster:
         else:
             return len(lat_lines) - 6
 
-    @cached_property
-    def num_str_atoms(self):
+    def num_str_atoms(self: Cluster,
+                      structure: str
+                     ):
         try:
-            with open(f"{self.structure}/{self._input_structure_fname}", 'r') as str_out:
+            with open(f"{self.structure}/{structure}", 'r') as str_out:
                 str_lines = str_out.readlines()
         except FileNotFoundError:
-            print(f'{self.structure}/{self._input_structure_fname} does not exists')
+            print(f'{self.structure}/{structure} does not exists')
 
         if len(str_lines[0].split(' ')) > 3:
             return len(str_lines) - 4
@@ -171,7 +196,7 @@ class Cluster:
     def vmatrix_array(self: Cluster) -> np.ndarray:
         return np.vstack(list(self.vmat.values()))
 
-    @cached_property
+    @property
     def disordered_correlations(self: Cluster) -> np.ndarray:
 
         corr_rnd = subprocess.run(['corrdump', '-c', f'-cf={self.structure}/{self._clusters_fname}', f'-s={self.structure}/{self._input_structure_fname}', f'-l={self.structure}/{self._lattice_fname}', '-rnd'],
@@ -223,6 +248,39 @@ class Cluster:
     def distance_from_disordered(self: Cluster, correlations: np.ndarray) -> float:
         return np.linalg.norm(self.disordered_correlations - correlations)
 
+    @classmethod
+    def from_maximal_cluster(cls: Cluster,
+                             maxclus_fname: str = 'maxclus.in',
+                             lattice_fname: str = 'lat.in',
+                            ):
+        try:
+            structure_ = os.getcwd()
+            path_ = Path(structure_)
+            phase_ = str(path_.parent.absolute())
+            _ = subprocess.run(['cvmclus',
+                                f'-m={phase_}/{maxclus_fname}',
+                                f'-l={structure_}/{lattice_fname}'
+                               ],
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE,
+                               check=True
+                              )
+        except subprocess.SubprocessError as suberr:
+            print('Error in generating cluster configuration files for CVM.')
+            print('Continuing to run. Might work if the required files already exists, maybe created by some previous run of cvmclus')
+
+        #Create Cluster Object
+        cluster = Cluster(_clusters_fname = 'clusters.out',
+                          _eci_fname = 'eci.out',
+                          _clustermult_fname = 'clusmult.out',
+                          _config_fname = 'config.out',
+                          _configmult_fname = 'configmult.out',
+                          _kb_fname = 'configkb.out',
+                          _vmat_fname = 'vmat.out',
+                          _lattice_fname = lattice_fname,
+                         )
+        return cluster
+
     def __repr__(self: Cluster) -> str:
 
         print('\n===========================')
@@ -271,7 +329,8 @@ class Cluster:
         print(f"Phase: {self.phase.rsplit('/',maxsplit=1)[-1]}")
         print(f'No. of lattice atoms: {self.num_lat_atoms}')
         print(f"Structure: {self.structure.split('/')[-1]}")
-        print(f'No. of structure atoms: {self.num_str_atoms}')
+        num_str_atoms_ = self.num_str_atoms(self.input_structure)
+        print(f'No. of structure atoms: {num_str_atoms_}')
         print(f'=========================================')
 
         return ''
